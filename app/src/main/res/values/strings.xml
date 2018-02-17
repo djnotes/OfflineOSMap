@@ -3,4 +3,5 @@
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
     <string name="go">Go</string>
+    <string name="permission_not_granted_please_allow">Permission not granted. Please allow requested permissions</string>
 </resources>
