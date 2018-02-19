@@ -3,17 +3,12 @@ package mehdi.me.offlinemap;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.BitmapDrawable;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
-import android.support.design.widget.BaseTransientBottomBar;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -24,54 +19,26 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import org.osmdroid.LocationListenerProxy;
 import org.osmdroid.api.IMapController;
 import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.IRegisterReceiver;
-import org.osmdroid.tileprovider.MapTileProviderArray;
-import org.osmdroid.tileprovider.MapTileProviderBasic;
-import org.osmdroid.tileprovider.modules.GEMFFileArchive;
-import org.osmdroid.tileprovider.modules.IArchiveFile;
-import org.osmdroid.tileprovider.modules.MapTileDownloader;
-import org.osmdroid.tileprovider.modules.MapTileFileArchiveProvider;
-import org.osmdroid.tileprovider.modules.MapTileFilesystemProvider;
-import org.osmdroid.tileprovider.modules.MapTileModuleProviderBase;
-import org.osmdroid.tileprovider.modules.NetworkAvailabliltyCheck;
-import org.osmdroid.tileprovider.modules.TileWriter;
-import org.osmdroid.tileprovider.tilesource.ITileSource;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
-import org.osmdroid.tileprovider.tilesource.XYTileSource;
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
-import org.osmdroid.views.overlay.IconOverlay;
-import org.osmdroid.views.overlay.ItemizedIconOverlay;
-import org.osmdroid.views.overlay.ItemizedOverlay;
-import org.osmdroid.views.overlay.ItemizedOverlayWithFocus;
-import org.osmdroid.views.overlay.MinimapOverlay;
-import org.osmdroid.views.overlay.Overlay;
 import org.osmdroid.views.overlay.OverlayItem;
 import org.osmdroid.views.overlay.ScaleBarOverlay;
 import org.osmdroid.views.overlay.compass.CompassOverlay;
 import org.osmdroid.views.overlay.gestures.RotationGestureOverlay;
-import org.osmdroid.views.overlay.gridlines.LatLonGridlineOverlay2;
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
-import org.osmdroid.views.overlay.mylocation.IMyLocationConsumer;
-import org.osmdroid.views.overlay.mylocation.IMyLocationProvider;
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Timer;
-import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, LocationListener {
     private static final int STORAGE_REQUEST = 100;
     private static final int LOCATION_REQUEST = 101;
     private static final String TAG = "MainActivity";
     private Context mContext;
-    private MapView mapView;
+    private MapView mMap;
     private EditText latitude;
     private EditText longitude;
     private Button searchLocation;
@@ -84,17 +51,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     /**
      * Compass overlay
      */
-    private CompassOverlay compassOverlay;
+    private CompassOverlay mCompassOverlay;
 
-    private LatLonGridlineOverlay2 gridlineOverlay;
 
-    private RotationGestureOverlay rotationGestureOverlay;
+    private RotationGestureOverlay mRotationOverlay;
 
-    private ScaleBarOverlay scaleBarOverlay;
+    private ScaleBarOverlay mScaleBarOverlay;
 
-    private MinimapOverlay minimapOverlay;
 
-    private ItemizedIconOverlay<OverlayItem> myLocationOverlay;
+    private MyLocationNewOverlay mMyLocationOverlay;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -119,12 +84,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
 
 
-        mapView = findViewById(R.id.mapView);
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
+        mMap = findViewById(R.id.mapView);
+        mMap.setTileSource(TileSourceFactory.MAPNIK);
 
 
-        mapView.setBuiltInZoomControls(true);
-        mapView.setMultiTouchControls(true);
+        mMap.setBuiltInZoomControls(true);
+        mMap.setMultiTouchControls(true);
 
 
         latitude = findViewById(R.id.latitude);
@@ -133,8 +98,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         searchLocation.setOnClickListener(this);
 
 
-        mapController = mapView.getController();
-        mapController.setZoom(20.0f);
+        mapController = mMap.getController();
+        mapController.setZoom(9.0f);
 
         //Add my location
 
@@ -153,73 +118,35 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mapController.setCenter(iran);
 
 
-        //Add compass overlay
-        compassOverlay = new CompassOverlay(mContext, mapView);
-        compassOverlay.enableCompass();
-        compassOverlay.setEnabled(true);
-        mapView.getOverlays().add(compassOverlay);
+        //Add my location overlay
+        mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMap);
+        mMyLocationOverlay.enableMyLocation();
+        mMap.getOverlays().add(mMyLocationOverlay);
 
-        //Add gridline overlay
-        gridlineOverlay = new LatLonGridlineOverlay2();
-//        mapView.getOverlays().add(gridlineOverlay); //Commented out because it's ugly!
+        //Add compass overlay
+        mCompassOverlay = new CompassOverlay(mContext, mMap);
+        mCompassOverlay.enableCompass();
+        mCompassOverlay.setEnabled(true);
+        mMap.getOverlays().add(mCompassOverlay);
+
+
 
         //Add rotation gesture overlay
-        rotationGestureOverlay = new RotationGestureOverlay(mapView);
-        rotationGestureOverlay.setEnabled(true);
-        mapView.setMultiTouchControls(true);
-        mapView.getOverlays().add(rotationGestureOverlay);
+        mRotationOverlay = new RotationGestureOverlay(mMap);
+        mRotationOverlay.setEnabled(true);
+        mMap.setMultiTouchControls(true);
+        mMap.getOverlays().add(mRotationOverlay);
 
 
         //Add map scale bar overlay
-        scaleBarOverlay = new ScaleBarOverlay(mapView);
-        scaleBarOverlay.setCentred(true);
+        mScaleBarOverlay = new ScaleBarOverlay(mMap);
+        mScaleBarOverlay.setCentred(true);
         DisplayMetrics dm = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(dm);
-        scaleBarOverlay.setScaleBarOffset(dm.widthPixels / 2, 30);
-        mapView.getOverlays().add(scaleBarOverlay);
-
-        items.add(new OverlayItem("Mehdi", "Mehdi Haghgoo", new GeoPoint(loc)));
-        //ItemizedOverlayWithFocus
-        ItemizedOverlayWithFocus<OverlayItem> overlayFocus = new ItemizedOverlayWithFocus<OverlayItem>(mContext,
-                items,
-                new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
-                    @Override
-                    public boolean onItemSingleTapUp(int i, OverlayItem overlayItem) {
-                        Snackbar.make(getCurrentFocus(), "onItemSingleTapUp", Snackbar.LENGTH_SHORT).show();
-                        return true;
-                    }
-
-                    @Override
-                    public boolean onItemLongPress(int i, OverlayItem overlayItem) {
-                        return false;
-                    }
-                });
-        overlayFocus.setFocusItemsOnTap(true);
-        mapView.getOverlays().add(overlayFocus);
+        mScaleBarOverlay.setScaleBarOffset(dm.widthPixels / 2, 30);
+        mMap.getOverlays().add(mScaleBarOverlay);
 
 
-        myLocationOverlay = new ItemizedIconOverlay<OverlayItem>(items,
-                getResources().getDrawable(R.drawable.map_focus),
-                new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
-            @Override
-            public boolean onItemSingleTapUp(int i, OverlayItem overlayItem) {
-                Toast.makeText(mContext, overlayItem.getTitle(), Toast.LENGTH_SHORT).show();
-                GeoPoint currLoc = null;
-                if(ActivityCompat.checkSelfPermission(mContext, Manifest.permission_group.LOCATION) == PackageManager.PERMISSION_GRANTED)
-                        currLoc = new GeoPoint(locMgr.getLastKnownLocation(provider));
-                IconOverlay gpsUpdateIcon = new IconOverlay(currLoc, getResources().getDrawable(R.drawable.my_location));
-                        mapView.getOverlays().add(gpsUpdateIcon);
-                return true;
-            }
-
-            @Override
-            public boolean onItemLongPress(int i, OverlayItem overlayItem) {
-                Toast.makeText(mContext, overlayItem.getSnippet(), Toast.LENGTH_SHORT).show();
-
-                return true;
-            }
-        }, mContext);
-        mapView.getOverlays().add(myLocationOverlay);
 
     }
 
@@ -250,50 +177,31 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onPause() {
         super.onPause();
-        mapView.onPause();
+        mMyLocationOverlay.setEnabled(false);
+        mMap.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mapView.onResume();
+        mMyLocationOverlay.setEnabled(true);
+        mMap.onResume();
+
     }
 
     @Override
     public void onLocationChanged(Location location) {
-        Log.d(TAG, "onLocationChanged: " + location.getLatitude() + ", " + location.getLongitude());
-        items.add(new OverlayItem("Here", "New Location", new GeoPoint(location)));
-        myLocationOverlay = new ItemizedIconOverlay<OverlayItem>(items, new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
-            @Override
-            public boolean onItemSingleTapUp(int i, OverlayItem overlayItem) {
-                return false;
-            }
-
-            @Override
-            public boolean onItemLongPress(int i, OverlayItem overlayItem) {
-                return false;
-            }
-        }, mContext);
-        mapView.getOverlays().add(myLocationOverlay);
-
-        GeoPoint point = new GeoPoint(location);
-        mapController.setCenter(point);
-        mapView.invalidate();
-
     }
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
-
     }
 
     @Override
     public void onProviderEnabled(String provider) {
-
     }
 
     @Override
     public void onProviderDisabled(String provider) {
-
     }
 }
