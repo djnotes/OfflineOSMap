@@ -12,6 +12,8 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
+import android.support.design.widget.BaseTransientBottomBar;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -42,8 +44,10 @@ import org.osmdroid.tileprovider.tilesource.XYTileSource;
 import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.IconOverlay;
 import org.osmdroid.views.overlay.ItemizedIconOverlay;
 import org.osmdroid.views.overlay.ItemizedOverlay;
+import org.osmdroid.views.overlay.ItemizedOverlayWithFocus;
 import org.osmdroid.views.overlay.MinimapOverlay;
 import org.osmdroid.views.overlay.Overlay;
 import org.osmdroid.views.overlay.OverlayItem;
@@ -102,7 +106,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Configuration.getInstance().setUserAgentValue("Dalvik");
 
 
-
         setContentView(R.layout.activity_main);
 
 
@@ -138,14 +141,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Criteria criteria = new Criteria();
         criteria.setAccuracy(Criteria.ACCURACY_FINE);
 
-        LocationManager locMgr = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
-        String provider = locMgr.getBestProvider(criteria, true);
+        final LocationManager locMgr = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+        final String provider = locMgr.getBestProvider(criteria, true);
+        locMgr.requestLocationUpdates(provider, 1000, 100, this);
 
         Location loc = locMgr.getLastKnownLocation(provider);
         Log.d(TAG, "onCreate: " + loc.getLatitude() + ", " + loc.getLongitude());
-        mapController.setCenter(new GeoPoint(loc));
 
-        locMgr.requestLocationUpdates(provider, 1000, 100, this);
+        //Start on Iran
+        GeoPoint iran = new GeoPoint(32.4279, 53.6880);
+        mapController.setCenter(iran);
+
 
         //Add compass overlay
         compassOverlay = new CompassOverlay(mContext, mapView);
@@ -169,19 +175,48 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         scaleBarOverlay.setCentred(true);
         DisplayMetrics dm = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(dm);
-        scaleBarOverlay.setScaleBarOffset(dm.widthPixels/2,  30);
+        scaleBarOverlay.setScaleBarOffset(dm.widthPixels / 2, 30);
         mapView.getOverlays().add(scaleBarOverlay);
 
         items.add(new OverlayItem("Mehdi", "Mehdi Haghgoo", new GeoPoint(loc)));
-        myLocationOverlay = new ItemizedIconOverlay<OverlayItem>(items, new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
+        //ItemizedOverlayWithFocus
+        ItemizedOverlayWithFocus<OverlayItem> overlayFocus = new ItemizedOverlayWithFocus<OverlayItem>(mContext,
+                items,
+                new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
+                    @Override
+                    public boolean onItemSingleTapUp(int i, OverlayItem overlayItem) {
+                        Snackbar.make(getCurrentFocus(), "onItemSingleTapUp", Snackbar.LENGTH_SHORT).show();
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onItemLongPress(int i, OverlayItem overlayItem) {
+                        return false;
+                    }
+                });
+        overlayFocus.setFocusItemsOnTap(true);
+        mapView.getOverlays().add(overlayFocus);
+
+
+        myLocationOverlay = new ItemizedIconOverlay<OverlayItem>(items,
+                getResources().getDrawable(R.drawable.map_focus),
+                new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
             @Override
             public boolean onItemSingleTapUp(int i, OverlayItem overlayItem) {
-                return false;
+                Toast.makeText(mContext, overlayItem.getTitle(), Toast.LENGTH_SHORT).show();
+                GeoPoint currLoc = null;
+                if(ActivityCompat.checkSelfPermission(mContext, Manifest.permission_group.LOCATION) == PackageManager.PERMISSION_GRANTED)
+                        currLoc = new GeoPoint(locMgr.getLastKnownLocation(provider));
+                IconOverlay gpsUpdateIcon = new IconOverlay(currLoc, getResources().getDrawable(R.drawable.my_location));
+                        mapView.getOverlays().add(gpsUpdateIcon);
+                return true;
             }
 
             @Override
             public boolean onItemLongPress(int i, OverlayItem overlayItem) {
-                return false;
+                Toast.makeText(mContext, overlayItem.getSnippet(), Toast.LENGTH_SHORT).show();
+
+                return true;
             }
         }, mContext);
         mapView.getOverlays().add(myLocationOverlay);
