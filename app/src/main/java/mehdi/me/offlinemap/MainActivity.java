@@ -24,6 +24,8 @@ import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.IconOverlay;
+import org.osmdroid.views.overlay.ItemizedIconOverlay;
 import org.osmdroid.views.overlay.OverlayItem;
 import org.osmdroid.views.overlay.ScaleBarOverlay;
 import org.osmdroid.views.overlay.compass.CompassOverlay;
@@ -119,9 +121,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
         //Add my location overlay
-        mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMap);
-        mMyLocationOverlay.enableMyLocation();
-        mMap.getOverlays().add(mMyLocationOverlay);
+        OverlayItem newItem = new OverlayItem("Here", "You are here", new GeoPoint(iran));
+        items.add(newItem);
+
+        ItemizedIconOverlay<OverlayItem> myLocOverlay = new ItemizedIconOverlay<OverlayItem>(items,
+                getResources().getDrawable(R.drawable.my_location, null),
+                new ItemizedIconOverlay.OnItemGestureListener<OverlayItem>() {
+                    @Override
+                    public boolean onItemSingleTapUp(int index, OverlayItem item) {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean onItemLongPress(int index, OverlayItem item) {
+                        return false;
+                    }
+                },
+        mContext);
+        mMap.getOverlays().add(myLocOverlay);
+
+
 
         //Add compass overlay
         mCompassOverlay = new CompassOverlay(mContext, mMap);
@@ -177,16 +196,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onPause() {
         super.onPause();
-        mMyLocationOverlay.setEnabled(false);
         mMap.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mMyLocationOverlay.setEnabled(true);
         mMap.onResume();
-
     }
 
     @Override
