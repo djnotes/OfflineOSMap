@@ -3,12 +3,10 @@ package mehdi.me.offlinemap;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.location.Criteria;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
+import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -21,23 +19,26 @@ import android.widget.Toast;
 
 import org.osmdroid.api.IMapController;
 import org.osmdroid.config.Configuration;
+import org.osmdroid.tileprovider.modules.ArchiveFileFactory;
+import org.osmdroid.tileprovider.modules.IArchiveFile;
+import org.osmdroid.tileprovider.modules.OfflineTileProvider;
+import org.osmdroid.tileprovider.tilesource.FileBasedTileSource;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
+import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
-import org.osmdroid.views.overlay.IconOverlay;
 import org.osmdroid.views.overlay.ItemizedIconOverlay;
 import org.osmdroid.views.overlay.OverlayItem;
 import org.osmdroid.views.overlay.ScaleBarOverlay;
 import org.osmdroid.views.overlay.compass.CompassOverlay;
 import org.osmdroid.views.overlay.gestures.RotationGestureOverlay;
-import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Set;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, LocationListener {
-    private static final int STORAGE_REQUEST = 100;
-    private static final int LOCATION_REQUEST = 101;
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static final String TAG = "MainActivity";
     private Context mContext;
     private MapView mMap;
@@ -62,6 +63,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     private MyLocationNewOverlay mMyLocationOverlay;
+    private View mRootView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,23 +77,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         setContentView(R.layout.activity_main);
 
-
-        //Check Permissions
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, STORAGE_REQUEST);
-        }
-
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST);
-        }
+        //Set root view
+        mRootView = findViewById(android.R.id.content);
 
 
         mMap = findViewById(R.id.mapView);
-        mMap.setTileSource(TileSourceFactory.MAPNIK);
 
 
         mMap.setBuiltInZoomControls(true);
         mMap.setMultiTouchControls(true);
+
+        //Disable data
+        mMap.setUseDataConnection(false);
 
 
         latitude = findViewById(R.id.latitude);
@@ -103,25 +100,98 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mapController = mMap.getController();
         mapController.setZoom(9.0f);
 
-        //Add my location
 
-        Criteria criteria = new Criteria();
-        criteria.setAccuracy(Criteria.ACCURACY_FINE);
 
-        final LocationManager locMgr = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
-        final String provider = locMgr.getBestProvider(criteria, true);
-        locMgr.requestLocationUpdates(provider, 1000, 100, this);
+        //Here, we set up offline map store
+        //custom image placeholder for files that aren't available
+        mMap.getTileProvider().setTileLoadFailureImage(getResources().getDrawable(R.drawable.notfound));
 
-        Location loc = locMgr.getLastKnownLocation(provider);
-        Log.d(TAG, "onCreate: " + loc.getLatitude() + ", " + loc.getLongitude());
+        //first we'll look at the default location for tiles that we support
+        File f = new File(Environment.getExternalStorageDirectory().getPath() + "/osmdroid/");
+        Log.d(TAG, "addOverlaysFromOfflineStore: " + f.getAbsolutePath());
+        if (f.exists()) {
 
-        //Start on Iran
-        GeoPoint iran = new GeoPoint(32.4279, 53.6880);
-        mapController.setCenter(iran);
+            File[] list = f.listFiles();
+            if (list != null) {
+                for (File aList : list) {
+                    if (aList.isDirectory()) {
+                        continue;
+                    }
+                    String name = aList.getName().toLowerCase();
+                    if (!name.contains(".")) {
+                        continue; //skip files without an extension
+                    }
+                    name = name.substring(name.lastIndexOf(".") + 1);
+                    if (name.length() == 0) {
+                        continue;
+                    }
+                    if (ArchiveFileFactory.isFileExtensionRegistered(name)) {
+                        try {
+
+                            //ok found a file we support and have a driver for the format, for this demo, we'll just use the first one
+
+                            //create the offline tile provider, it will only do offline file archives
+                            //again using the first file
+                            OfflineTileProvider tileProvider = new OfflineTileProvider(new SimpleRegisterReceiver(this),
+                                    new File[]{aList});
+
+                            //tell osmdroid to use that provider instead of the default rig which is (asserts, cache, files/archives, online
+                            mMap.setTileProvider(tileProvider);
+
+                            //this bit enables us to find out what tiles sources are available. note, that this action may take some time to run
+                            //and should be ran asynchronously. we've put it inline for simplicity
+
+                            String source = "";
+                            IArchiveFile[] archives = tileProvider.getArchives();
+                            if (archives.length > 0) {
+                                //cheating a bit here, get the first archive file and ask for the tile sources names it contains
+                                Log.d(TAG, "addOverlaysFromOfflineStore: " + archives[0].toString());
+                                Set<String> tileSources = archives[0].getTileSources();
+                                //presumably, this would be a great place to tell your users which tiles sources are available
+                                if (!tileSources.isEmpty()) {
+                                    //ok good, we found at least one tile source, create a basic file based tile source using that name
+                                    //and set it. If we don't set it, osmdroid will attempt to use the default source, which is "MAPNIK",
+                                    //which probably won't match your offline tile source, unless it's MAPNIK
+                                    source = tileSources.iterator().next();
+                                    Log.d(TAG, "addOverlaysFromOfflineStore: tileSource: " + source);
+                                    this.mMap.setTileSource(FileBasedTileSource.getSource(source));
+                                } else {
+                                    this.mMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+                                }
+
+                            } else {
+                                this.mMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+                            }
+
+                            Snackbar.make(findViewById(android.R.id.content), "Using " + aList.getAbsolutePath() + " " + source, Snackbar.LENGTH_LONG).show();
+                            this.mMap.invalidate();
+                            return;
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+            }
+            Snackbar.make(mRootView, f.getAbsolutePath() + " did not have any files I can open! Try using MOBAC", Snackbar.LENGTH_LONG).show();
+            Log.d(TAG, "addOverlaysFromOfflineStore: " + f.getAbsolutePath() + " did not have any files I can open! Try using MOBAC");
+        } else {
+            Snackbar.make(mRootView, f.getAbsolutePath() + " dir not found!", Snackbar.LENGTH_LONG).show();
+            Log.d(TAG, "addOverlaysFromOfflineStore: " + f.getAbsolutePath() + " dir not found!");
+        }
+
+        Log.d(TAG, "addOverlaysFromOfflineStore: " + mMap.getTileProvider().getTileSource().toString());
+
+
+
+
+
+        //Start on Tehran
+        GeoPoint tehran = new GeoPoint(35.6892, 51.3890);
+        mapController.setCenter(tehran);
 
 
         //Add my location overlay
-        OverlayItem newItem = new OverlayItem("Here", "You are here", new GeoPoint(iran));
+        OverlayItem newItem = new OverlayItem("Here", "You are here", new GeoPoint(tehran));
         items.add(newItem);
 
         ItemizedIconOverlay<OverlayItem> myLocOverlay = new ItemizedIconOverlay<OverlayItem>(items,
@@ -167,17 +237,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
 
-    }
 
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        //Check and decide
-        if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(mContext, R.string.permission_not_granted_please_allow, Toast.LENGTH_LONG).show();
-        }
 
     }
 
@@ -204,20 +265,5 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onResume();
         mMap.onResume();
     }
-
-    @Override
-    public void onLocationChanged(Location location) {
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-    }
-
-    @Override
-    public void onProviderEnabled(String provider) {
-    }
-
-    @Override
-    public void onProviderDisabled(String provider) {
-    }
 }
+
