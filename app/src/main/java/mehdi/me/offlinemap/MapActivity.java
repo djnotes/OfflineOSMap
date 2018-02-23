@@ -15,6 +15,7 @@ import android.util.Log;
 import android.view.View;
 
 import org.osmdroid.api.IMapController;
+import org.osmdroid.tileprovider.MapTileProviderBasic;
 import org.osmdroid.tileprovider.modules.ArchiveFileFactory;
 import org.osmdroid.tileprovider.modules.IArchiveFile;
 import org.osmdroid.tileprovider.modules.OfflineTileProvider;
@@ -63,23 +64,28 @@ public class MapActivity extends AppCompatActivity {
         mRootView = findViewById(android.R.id.content);
 
         mMap = findViewById(R.id.map);
-        mMap.setTileSource(TileSourceFactory.MAPNIK);
+//        mMap.setTileSource(TileSourceFactory.MAPNIK);
+        mMap.setUseDataConnection(false);
 
-        GeoPoint tehran = new GeoPoint(35.6892, 51.3890);
-        mController = mMap.getController();
-        mController.setCenter(tehran);
 
-        mController.setZoom(15.0f);
+        //Init offline storage
+        initOfflineStorage();
+
+
         mMap.setMultiTouchControls(true);
 
         //Add my location overlay
         mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMap);
         mMyLocationOverlay.enableMyLocation();
         mMap.getOverlays().add(mMyLocationOverlay);
-        mMap.setMultiTouchControls(true);
 
-        //Init offline storage
-//        initOfflineStorage();
+        GeoPoint here = mMyLocationOverlay.getMyLocation();
+        mController = mMap.getController();
+        mController.setZoom(15.0f);
+        mController.setCenter(here);
+        MapTileProviderBasic a;
+
+
     }
 
     private void initOfflineStorage() {
@@ -93,8 +99,10 @@ public class MapActivity extends AppCompatActivity {
         if (f.exists()) {
 
             File[] list = f.listFiles();
+            Log.d(TAG, "initOfflineStorage: Number of files: " + f.length());
             if (list != null) {
                 for (File aList : list) {
+                    Log.d(TAG, "initOfflineStorage: archive: " + aList.getName());
                     if (aList.isDirectory()) {
                         continue;
                     }
@@ -107,6 +115,7 @@ public class MapActivity extends AppCompatActivity {
                         continue;
                     }
                     if (ArchiveFileFactory.isFileExtensionRegistered(name)) {
+                        Log.d(TAG, "initOfflineStorage: isFileExtensionRegistered: " + name+ ":" + ArchiveFileFactory.isFileExtensionRegistered(name) );
                         try {
 
                             //ok found a file we support and have a driver for the format, for this demo, we'll just use the first one
@@ -115,6 +124,7 @@ public class MapActivity extends AppCompatActivity {
                             //again using the first file
                             OfflineTileProvider tileProvider = new OfflineTileProvider(new SimpleRegisterReceiver(this),
                                     new File[]{aList});
+                            Log.d(TAG, "initOfflineStorage: Number of offline files: " + tileProvider.getArchives().length );
 
                             //tell osmdroid to use that provider instead of the default rig which is (asserts, cache, files/archives, online
                             mMap.setTileProvider(tileProvider);
