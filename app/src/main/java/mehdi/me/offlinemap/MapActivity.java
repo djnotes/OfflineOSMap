@@ -37,6 +37,7 @@ public class MapActivity extends AppCompatActivity {
     private static final int REQUEST_LOCATION = 100;
     private static final int REQUEST_STORAGE = 101;
     private static final String MAP_FILE = "Iran.sqlite";
+    private static final String[] PERMISSIONS_STORAGE = new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE};
     private Context mContext;
     private Activity mActivity = this;
     private MapView mMapView;
@@ -44,92 +45,96 @@ public class MapActivity extends AppCompatActivity {
     private MyLocationNewOverlay mMyLocationOverlay;
     private static final String TAG = "MapActivity";
     private View mRootView;
+    private OfflineTileProvider offlineProvider;
+    private String myTileSource;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         //Get context
         mContext = getApplicationContext();
 
-        if(ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION);
-        }
-        if(ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_STORAGE);
-        }
-
         org.osmdroid.config.Configuration.getInstance().load(mContext, PreferenceManager.getDefaultSharedPreferences(mContext));
-
 
         //Inflate and create the map
         mMapView = new MapView(mContext);
         setContentView(mMapView);
+        mMapView.setTileSource(TileSourceFactory.HIKEBIKEMAP);
 
-//        mRootView = findViewById(android.R.id.content);
-//
-////        mMapView = findViewById(R.id.map);
-////        mMapView.setTileSource(TileSourceFactory.MAPNIK);
-//        mMapView.setUseDataConnection(false);
-//
-//        //Add my location overlay
-//        mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMapView);
-//        mMyLocationOverlay.enableMyLocation();
-//        mMapView.getOverlays().add(mMyLocationOverlay);
-//
-//        GeoPoint here = mMyLocationOverlay.getMyLocation();
-//        mController = mMapView.getController();
-//        mController.setZoom(15.0f);
-//        mController.setCenter(here);
-        new OfflineMap().execute();
+        //Add my location overlay
+        mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMapView);
+        mMyLocationOverlay.enableMyLocation();
+        mMapView.getOverlays().add(mMyLocationOverlay);
 
+        GeoPoint here = mMyLocationOverlay.getMyLocation();
+        mController = mMapView.getController();
+        mController.setZoom(15.0f);
+        mController.setCenter(here);
+
+
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestStoragePermission();
+        }
+        else {
+            initOfflineMap();
+        }
+
+
+
+
+    }
+
+    private void requestStoragePermission() {
+        if(ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.READ_EXTERNAL_STORAGE) ||
+                ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            Snackbar.make(mRootView, R.string.storage_access_rationale, Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.ok, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            ActivityCompat.requestPermissions(mActivity, PERMISSIONS_STORAGE, REQUEST_STORAGE);
+                        }
+                    })
+                    .show();
+        }
+        ActivityCompat.requestPermissions(mActivity, PERMISSIONS_STORAGE, REQUEST_STORAGE);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            initOfflineMap();
+        }
+        else {
+            Snackbar.make(mRootView, R.string.permission_not_granted_please_allow, Snackbar.LENGTH_LONG).show();
+        }
         //Init offline storage
-
     }
 
-    private class OfflineMap extends AsyncTask<Void, Void, Void> {
-            String myTileSource = "";
-            OfflineTileProvider offlineProvider;
+    private void initOfflineMap() {
+        mMapView.setUseDataConnection(false);
 
-            File file = null;
-        @Override
-        protected Void doInBackground(Void... voids) {
-            mMapView.setUseDataConnection(false);
-
-            //first we'll look at the default location for tiles that we support
-            file = new File(Environment.getExternalStorageDirectory().getPath() + "/osmdroid/" + MAP_FILE);
-            Log.d(TAG, "doInBackground: file exists: " + file.exists());
-            offlineProvider = null;
-            try {
-                offlineProvider = new OfflineTileProvider(new SimpleRegisterReceiver(mContext), new File[] {file});
+        File file;
+        //first we'll look at the default location for tiles that we support
+        file = new File(Environment.getExternalStorageDirectory().getPath() + "/osmdroid/" + MAP_FILE);
+        Log.d(TAG, "doInBackground: file exists: " + file.exists());
+        offlineProvider = null;
+        try {
+            offlineProvider = new OfflineTileProvider(new SimpleRegisterReceiver(mContext), new File[] {file});
             mMapView.setTileProvider(offlineProvider);
             IArchiveFile[] fileArchives = offlineProvider.getArchives();
             Log.d(TAG, "doInBackground: archives: " + fileArchives.length);
             Set<String> myTileSources = fileArchives[0].getTileSources();
-                Log.d(TAG, "doInBackground: tile sources: " + myTileSources.size());
+            Log.d(TAG, "doInBackground: tile sources: " + myTileSources.size());
             myTileSource = myTileSources.iterator().next(); //Get the first item
-                Log.d(TAG, "doInBackground: myTileSource: " + myTileSource);
-            } catch (Exception e) {
-                Log.e(TAG, "addOverlays: offline provider error " + e.getMessage());
-            }
-            return null;
+            Log.d(TAG, "doInBackground: myTileSource: " + myTileSource);
+        } catch (Exception e) {
+            Log.e(TAG, "addOverlays: offline provider error " + e.getMessage());
         }
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            super.onPostExecute(aVoid);
-            if(mMapView == null) {
-                finishActivity(100);
-                return;
-            }
-            mMapView.setTileProvider(offlineProvider);
-            mMapView.setTileSource(FileBasedTileSource.getSource(myTileSource)); //Set a file-based tile source
-            Snackbar.make(findViewById(android.R.id.content), "Using " + file.getAbsolutePath() , Snackbar.LENGTH_LONG).show();
-        }
+        mMapView.setTileProvider(offlineProvider);
+        mMapView.setTileSource(FileBasedTileSource.getSource(myTileSource)); //Set a file-based tile source
+        Snackbar.make(findViewById(android.R.id.content), "Using " + file.getAbsolutePath() , Snackbar.LENGTH_LONG).show();
     }
+
 }
