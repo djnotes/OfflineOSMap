@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.AsyncTask;
 import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
@@ -14,15 +13,11 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
 
 import org.osmdroid.api.IMapController;
-import org.osmdroid.tileprovider.modules.ArchiveFileFactory;
 import org.osmdroid.tileprovider.modules.IArchiveFile;
-import org.osmdroid.tileprovider.modules.MapTileSqlCacheProvider;
 import org.osmdroid.tileprovider.modules.OfflineTileProvider;
 import org.osmdroid.tileprovider.tilesource.FileBasedTileSource;
-import org.osmdroid.tileprovider.tilesource.ITileSource;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.tileprovider.util.SimpleRegisterReceiver;
 import org.osmdroid.util.GeoPoint;
@@ -37,7 +32,7 @@ public class MapActivity extends AppCompatActivity {
     private static final int REQUEST_LOCATION = 100;
     private static final int REQUEST_STORAGE = 101;
     private static final String MAP_FILE = "Iran.sqlite";
-    private static final String[] PERMISSIONS_STORAGE = new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE};
+    private static final String[] PERMISSIONS = new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
     private Context mContext;
     private Activity mActivity = this;
     private MapView mMapView;
@@ -59,7 +54,7 @@ public class MapActivity extends AppCompatActivity {
         //Inflate and create the map
         mMapView = new MapView(mContext);
         setContentView(mMapView);
-        mMapView.setTileSource(TileSourceFactory.HIKEBIKEMAP);
+        mMapView.setTileSource(TileSourceFactory.PUBLIC_TRANSPORT);
 
         //Add my location overlay
         mMyLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(mContext), mMapView);
@@ -72,8 +67,11 @@ public class MapActivity extends AppCompatActivity {
         mController.setCenter(here);
 
 
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        int granted = PackageManager.PERMISSION_GRANTED;
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) != granted ||
+                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.READ_EXTERNAL_STORAGE) != granted  ||
+                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != granted ||
+                ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != granted) {
             requestStoragePermission();
         }
         else {
@@ -87,17 +85,19 @@ public class MapActivity extends AppCompatActivity {
 
     private void requestStoragePermission() {
         if(ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.READ_EXTERNAL_STORAGE) ||
-                ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE) ||
+                ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.ACCESS_FINE_LOCATION) ||
+                ActivityCompat.shouldShowRequestPermissionRationale(mActivity, Manifest.permission.ACCESS_COARSE_LOCATION)) {
             Snackbar.make(mRootView, R.string.storage_access_rationale, Snackbar.LENGTH_INDEFINITE)
                     .setAction(R.string.ok, new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            ActivityCompat.requestPermissions(mActivity, PERMISSIONS_STORAGE, REQUEST_STORAGE);
+                            ActivityCompat.requestPermissions(mActivity, PERMISSIONS, REQUEST_STORAGE);
                         }
                     })
                     .show();
         }
-        ActivityCompat.requestPermissions(mActivity, PERMISSIONS_STORAGE, REQUEST_STORAGE);
+        ActivityCompat.requestPermissions(mActivity, PERMISSIONS, REQUEST_STORAGE);
     }
 
     @Override
